@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+set -u
+
+# Project paths
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$SCRIPT_DIR/logs"
+LOG_FILE="$LOG_DIR/health.log"
+
+# Warning thresholds
+CPU_THRESHOLD=80
+MEMORY_THRESHOLD=80
+DISK_THRESHOLD=80
+
+mkdir -p "$LOG_DIR"
+
+# Get CPU utilization over a one-second interval
+read_cpu() {
+    local cpu user nice system idle iowait irq softirq steal rest
+
+    read -r cpu user nice system idle iowait irq softirq steal rest < /proc/stat
+
+    CPU_TOTAL=$((user + nice + system + idle + iowait + irq + softirq + steal))
+    CPU_IDLE=$((idle + iowait))
+}
+
+read_cpu
+total1=$CPU_TOTAL
+idle1=$CPU_IDLE
+
+sleep 1
+
+read_cpu
+total2=$CPU_TOTAL
+idle2=$CPU_IDLE
+
+total_diff=$((total2 - total1))
+idle_diff=$((idle2 - idle1))
+
+if (( total_diff > 0 )); then
+    CPU_USAGE=$((100 * (total_diff - idle_diff) / total_diff))
+else
+    CPU_USAGE=0
+fi
+
+# Memory usage percentage
+MEMORY_USAGE=$(free | awk '/^Mem:/ {
+    if ($2 > 0) printf "%.0f", (($2 - $7) / $2) * 100
+}')
+
+# Root filesystem disk usage percentage
+DISK_USAGE=$(df -P / | awk 'NR == 2 {
+    gsub(/%/, "", $5)
+    print $5
+}')
+
+# Load average and uptime
+LOAD_AVERAGE=$(awk '{print $1}' /proc/loadavg)
+UPTIME=$(uptime -p)
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Write the report to the log
+{
+    echo "======================================"
+    echo "Timestamp: $TIMESTAMP"
+    echo "CPU Usage: ${CPU_USAGE}%"
+    echo "Memory Usage: ${MEMORY_USAGE}%"
+    echo "Disk Usage: ${DISK_USAGE}%"
+    echo "Load Average (1 min): $LOAD_AVERAGE"
+    echo "Uptime: $UPTIME"
+
+    if (( CPU_USAGE >= CPU_THRESHOLD )); then
+        echo "WARNING: High CPU usage"
+    fi
+
+    if (( MEMORY_USAGE >= MEMORY_THRESHOLD )); then
+        echo "WARNING: High memory usage"
+    fi
+
+    if (( DISK_USAGE >= DISK_THRESHOLD )); then
+        echo "WARNING: High disk usage"
+    fi
+
+    echo "Status: Health check completed"
+} >> "$LOG_FILE"
+
+echo "Health check completed at $TIMESTAMP"
+echo "CPU: ${CPU_USAGE}% | Memory: ${MEMORY_USAGE}% | Disk: ${DISK_USAGE}%"
+echo "Report saved to: $LOG_FILE"
