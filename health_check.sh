@@ -1,6 +1,50 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+# Server Health Monitor
+# Purpose: Monitor CPU, memory, disk, load average, and uptime.
+# Usage: ./health_check.sh [--help]
+# Logs:  logs/health.log
 
 set -u
+
+# Print usage information and exit successfully.
+show_help() {
+    cat <<'EOF'
+Server Health Monitor
+
+Usage:
+  ./health_check.sh [OPTION]
+
+Options:
+  -h, --help    Show this help message and exit
+
+Description:
+  Checks CPU utilization, memory usage, root disk usage,
+  load average, and server uptime. Appends a timestamped
+  report to logs/health.log.
+
+Examples:
+  ./health_check.sh
+  ./health_check.sh --help
+EOF
+}
+
+# Display help if requested. Reject unsupported arguments.
+case "${1:-}" in
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    "")
+        ;;
+    *)
+        echo "Error: Unknown option: $1" >&2
+        echo "Run './health_check.sh --help' for usage." >&2
+        exit 2
+        ;;
+esac
+
 
 # Project paths
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
